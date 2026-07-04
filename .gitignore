@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+data/input/
+data/output/
+*.pptx
+!sample/*.xlsx
+.DS_Store
+.streamlit/secrets.toml
