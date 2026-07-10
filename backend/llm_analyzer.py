@@ -1,9 +1,10 @@
-"""ChatGPT(OpenAI) API 연동 — 인사이트별 분석 생성.
+"""LLM 인사이트 분석 생성.
 
 각 인사이트에 대해 (1) 정량 통계와 (2) 초록 샘플을 컨텍스트로 주고,
 insights.py 의 '추천 항목'을 채우도록 구조화된 JSON을 요청한다.
 
-OPENAI_API_KEY 가 없으면 오프라인 데모용 mock 결과를 반환해
+호출은 backend.llm 의 클라이언트(Dataiku LLM Mesh 우선, OpenAI 폴백)를 사용한다.
+사용 가능한 클라이언트가 없으면 오프라인 데모용 mock 결과를 반환해
 UI/PPT 파이프라인을 API 없이도 검증할 수 있다.
 """
 
@@ -16,6 +17,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from . import analytics
+from . import llm as llm_module
 from .config import settings
 from .insights import Insight, get_insight
 
@@ -72,31 +74,23 @@ items 는 위 추천 항목 순서대로 모두 포함하세요."""
 
 
 def _get_client():
-    """OpenAI 클라이언트 생성. 실패하면 None."""
-    api_key = settings.openai_api_key
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI  # openai>=1.0
-
-        return OpenAI(api_key=api_key)
-    except Exception:
-        return None
+    """LLM 클라이언트 생성 (Dataiku LLM Mesh 우선, OpenAI 폴백). 없으면 None."""
+    return llm_module.get_client()
 
 
 def _mock_result(insight: Insight, stats: Dict[str, object]) -> InsightResult:
     items = [
         {
             "title": it,
-            "content": "(데모 모드) OPENAI_API_KEY 미설정 상태입니다. "
-            "API 키를 설정하면 데이터 기반 실제 분석이 채워집니다.",
+            "content": "(데모 모드) 사용 가능한 LLM이 없습니다. "
+            "Dataiku LLM(또는 로컬 OPENAI_API_KEY) 설정 후 재실행하면 실제 분석이 채워집니다.",
         }
         for it in insight.recommended_items
     ]
     return InsightResult(
         insight_id=insight.id,
         name=insight.name,
-        summary=f"[데모] '{insight.name}' 분석 자리표시자입니다. API 키 설정 후 재실행하세요.",
+        summary=f"[데모] '{insight.name}' 분석 자리표시자입니다. LLM 설정 후 재실행하세요.",
         items=items,
         stats=stats,
     )
@@ -125,16 +119,7 @@ def analyze_insight(insight_id: str, df: pd.DataFrame, client=None) -> InsightRe
         return _mock_result(insight, stats)
 
     try:
-        resp = client.chat.completions.create(
-            model=settings.openai_model,
-            temperature=settings.openai_temperature,
-            max_tokens=settings.openai_max_tokens,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _user_prompt(insight, stats)},
-            ],
-        )
-        content = resp.choices[0].message.content or ""
+        content = client.complete(SYSTEM_PROMPT, _user_prompt(insight, stats))
         parsed = _parse_json(content)
         return InsightResult(
             insight_id=insight.id,

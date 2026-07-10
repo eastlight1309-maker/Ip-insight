@@ -1,8 +1,8 @@
 # 📊 IP Insight 분석기
 
-Derwent **DWPI**를 포함한 특허 엑셀 파일을 업로드하면, **ChatGPT(OpenAI) API**로
-다양한 IP 인사이트를 도출하고 **PowerPoint 리포트**로 내려받는 웹앱입니다.
-**Dataiku DSS의 Streamlit 웹앱**으로 배포하는 것을 전제로 설계했으며,
+Derwent **DWPI**를 포함한 특허 엑셀 파일을 업로드하면, **Dataiku LLM Mesh**로 연결된
+허용 LLM(GPT‑5.x)으로 다양한 IP 인사이트를 도출하고 **PowerPoint 리포트**로 내려받는
+웹앱입니다. **Dataiku DSS의 Streamlit 웹앱**으로 배포하는 것을 전제로 설계했으며,
 입력 엑셀과 출력 PPT는 **Dataiku 관리 폴더(Managed Folder)**에 저장됩니다.
 
 ---
@@ -19,7 +19,8 @@ Ip-insight/
 │   ├── dataiku_io.py       # Dataiku 관리 폴더 I/O (+ 로컬 폴백)
 │   ├── data_loader.py      # 엑셀 로드 + DWPI 컬럼 정규화
 │   ├── analytics.py        # 정량 통계 (LLM 컨텍스트 + 차트용)
-│   ├── llm_analyzer.py     # ChatGPT API 연동 (인사이트별 분석)
+│   ├── llm.py              # LLM 호출 추상화 (Dataiku LLM Mesh → OpenAI 폴백 → 데모)
+│   ├── llm_analyzer.py     # 인사이트별 분석 생성
 │   ├── ppt_builder.py      # python-pptx 리포트 생성 (네이티브 차트)
 │   └── service.py          # 파이프라인 오케스트레이션 (프론트 진입점)
 ├── scripts/make_sample.py  # 데모용 가상 DWPI 엑셀 생성
@@ -29,7 +30,7 @@ Ip-insight/
 ```
 
 **데이터 흐름:** 엑셀 업로드 → (입력 폴더 저장) → 정규화 → 정량 통계 →
-ChatGPT 인사이트 분석 → PPT 생성 → (출력 폴더 저장) → 다운로드.
+LLM 인사이트 분석 → PPT 생성 → (출력 폴더 저장) → 다운로드.
 
 ---
 
@@ -76,16 +77,31 @@ cited_refs, citing_patents`
    - `frontend/app.py` 내용을 웹앱 코드로 사용 (백엔드 패키지는 프로젝트 라이브러리
      `project-lib`에 `backend/`를 넣거나 코드 환경에 포함).
    - 웹앱 설정에서 위 코드 환경 지정.
-4. **환경변수/시크릿 설정** (아래 표):
+4. **LLM 연결(LLM Mesh)**: DSS 관리자가 아래 허용된 LLM 연결을 활성화해야 합니다.
+   앱은 `project.get_llm(<LLM_ID>)` 로 호출하며, 별도 API 키를 코드에 넣지 않습니다.
+
+| 표시명 | LLM Mesh ID |
+|--------|-------------|
+| gpt-5.3-chat | `azureopenai:dw-aoai-chat-eastus2-cognitiv:gpt-5.3-chat` |
+| gpt-5.4-nano | `azureopenai:dw-aoai-chat-eastus2-cognitiv:gpt-5.4-nano` |
+| gpt-5.4-mini | `azureopenai:dw-aoai-chat-eastus2-cognitiv:gpt-5.4-mini` |
+| gpt-5.4 | `azureopenai:dw-aoai-chat-eastus2-cognitiv:gpt-5.4` |
+
+   목록은 `backend/config.py`의 `ALLOWED_LLM_CANDIDATES`에서 관리하며, UI 사이드바에서
+   이 중 하나를 선택합니다.
+
+5. **환경변수/시크릿 설정** (아래 표):
 
 | 환경변수 | 설명 | 예시 |
 |----------|------|------|
-| `OPENAI_API_KEY` | ChatGPT API 키 | `sk-...` |
-| `OPENAI_MODEL` | 사용할 모델 | `gpt-4o` |
+| `DKU_LLM_ID` | 기본 LLM Mesh ID (허용 목록 중 하나) | `azureopenai:dw-aoai-chat-eastus2-cognitiv:gpt-5.4` |
 | `DKU_INPUT_FOLDER_ID` | 입력 관리 폴더 ID | `AbC12xYz` |
 | `DKU_OUTPUT_FOLDER_ID` | 출력 관리 폴더 ID | `Def34Uvw` |
+| `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | (선택) 생성 파라미터 | `0.3` / `1800` |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | (선택) **로컬 개발 폴백 전용** | `sk-...` / `gpt-4o` |
 
-> API 키는 UI에서 직접 입력할 수도 있지만, 운영 환경에서는 환경변수/시크릿 사용을 권장합니다.
+> 운영(Dataiku)에서는 LLM Mesh를 통해 인증되므로 `OPENAI_API_KEY`가 필요 없습니다.
+> `OPENAI_*`는 Dataiku 밖 로컬 개발에서만 폴백으로 사용됩니다.
 
 배포되면 업로드된 엑셀은 입력 폴더에, 생성된 PPT는 출력 폴더에 자동 저장되고,
 사용자는 웹앱에서 PPT를 바로 다운로드합니다.
@@ -112,8 +128,10 @@ python tests/test_pipeline.py            # API 키 없이 데모 모드 스모�
 
 ---
 
-## 6. 동작 모드
+## 6. LLM 동작 모드 (우선순위)
 
-- **API 키 있음**: 각 인사이트에 대해 정량 통계 + DWPI 초록 샘플을 컨텍스트로
-  ChatGPT에 전달, 추천 항목을 채운 구조화(JSON) 분석을 생성.
-- **API 키 없음(데모)**: 파이프라인/PPT를 검증할 수 있도록 자리표시자 결과 생성.
+1. **Dataiku LLM Mesh** (운영 기본): 허용된 LLM ID로 `project.get_llm(...)` 호출.
+   각 인사이트마다 정량 통계 + DWPI 초록 샘플을 컨텍스트로 전달, 추천 항목을
+   채운 구조화(JSON) 분석을 생성.
+2. **OpenAI 폴백** (로컬 개발): Dataiku가 없고 `OPENAI_API_KEY`가 있을 때만.
+3. **데모(mock)**: 위 둘 다 불가할 때 자리표시자 결과로 파이프라인/PPT 검증.

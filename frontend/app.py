@@ -21,8 +21,8 @@ if _ROOT not in sys.path:
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
-from backend import data_loader, dataiku_io, service  # noqa: E402
-from backend.config import settings  # noqa: E402
+from backend import data_loader, dataiku_io, llm, service  # noqa: E402
+from backend.config import ALLOWED_LLM_CANDIDATES, settings  # noqa: E402
 from backend.insights import INSIGHTS, get_insight  # noqa: E402
 
 st.set_page_config(page_title="IP Insight 분석기", page_icon="📊", layout="wide")
@@ -34,17 +34,25 @@ st.set_page_config(page_title="IP Insight 분석기", page_icon="📊", layout="
 def sidebar() -> None:
     st.sidebar.title("⚙️ 설정")
 
-    st.sidebar.subheader("ChatGPT (OpenAI) API")
-    key = st.sidebar.text_input(
-        "API Key",
-        value=settings.openai_api_key,
-        type="password",
-        help="비워두면 데모 모드로 동작합니다. Dataiku에서는 환경변수/시크릿 권장.",
+    st.sidebar.subheader("🤖 LLM (Dataiku 허용 목록)")
+    labels = [label for label, _ in ALLOWED_LLM_CANDIDATES]
+    ids = [llm_id for _, llm_id in ALLOWED_LLM_CANDIDATES]
+    default_idx = ids.index(settings.llm_id) if settings.llm_id in ids else 0
+    choice = st.sidebar.selectbox("모델 선택", labels, index=default_idx)
+    settings.set_llm_id(ids[labels.index(choice)])
+    st.sidebar.caption(f"LLM ID: `{settings.llm_id}`")
+    st.sidebar.caption(
+        "실행 환경: "
+        + ("Dataiku LLM Mesh ✅" if llm.is_dataiku() else "로컬(OpenAI 폴백/데모)")
     )
-    model = st.sidebar.text_input("모델", value=settings.openai_model)
-    if key:
-        settings.openai_api_key = key
-    settings.openai_model = model or settings.openai_model
+
+    if not llm.is_dataiku():
+        with st.sidebar.expander("로컬 개발용 OpenAI 폴백(선택)"):
+            key = st.text_input("OPENAI_API_KEY", value=settings.openai_api_key, type="password")
+            model = st.text_input("OpenAI 모델", value=settings.openai_model)
+            if key:
+                settings.openai_api_key = key
+            settings.openai_model = model or settings.openai_model
 
     st.sidebar.divider()
     st.sidebar.subheader("📁 저장 위치 (Dataiku)")
@@ -157,8 +165,13 @@ def main() -> None:
 
     # 3) 실행
     st.subheader("3️⃣ 분석 실행")
-    if not settings.openai_api_key:
-        st.warning("API Key 미설정 — 데모(자리표시자) 결과가 생성됩니다.")
+    if llm.get_client() is None:
+        st.warning(
+            "사용 가능한 LLM이 없어 데모(자리표시자) 결과가 생성됩니다. "
+            "Dataiku LLM 또는 로컬 OPENAI_API_KEY를 설정하세요."
+        )
+    else:
+        st.caption(f"사용 LLM: `{settings.llm_id}`")
     if st.button("🚀 인사이트 분석 & PPT 생성", type="primary", disabled=not selected):
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         with st.spinner("분석 중… (선택한 인사이트 수에 따라 시간이 걸립니다)"):
