@@ -45,9 +45,10 @@ class Settings:
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
 
-    # --- Dataiku 관리 폴더 ID (DSS Flow에서 생성한 폴더의 ID) ---
-    input_folder_id: str = ""   # 업로드된 엑셀 원본 저장
-    output_folder_id: str = ""  # 생성된 PPT / 분석결과 저장
+    # --- Dataiku 관리 폴더 (이름 또는 ID로 지정 가능) ---
+    # dataiku.Folder(ref) 는 폴더 이름 또는 ID 모두 허용한다.
+    input_folder_ref: str = "ip_insight_input"    # 업로드된 엑셀 원본 저장
+    output_folder_ref: str = "ip_insight_output"  # 생성된 PPT / 분석결과 저장
 
     # --- 로컬 폴백 경로 (Dataiku 밖에서 실행 시) ---
     local_input_dir: str = "./data/input"
@@ -70,8 +71,9 @@ class Settings:
             llm_max_tokens=int(_get("LLM_MAX_TOKENS", "1800")),
             openai_api_key=_get("OPENAI_API_KEY", ""),
             openai_model=_get("OPENAI_MODEL", "gpt-4o"),
-            input_folder_id=_get("DKU_INPUT_FOLDER_ID", ""),
-            output_folder_id=_get("DKU_OUTPUT_FOLDER_ID", ""),
+            # 이름 우선(DKU_INPUT_FOLDER), 없으면 ID(DKU_INPUT_FOLDER_ID), 없으면 기본 이름
+            input_folder_ref=_get("DKU_INPUT_FOLDER", _get("DKU_INPUT_FOLDER_ID", "ip_insight_input")),
+            output_folder_ref=_get("DKU_OUTPUT_FOLDER", _get("DKU_OUTPUT_FOLDER_ID", "ip_insight_output")),
             local_input_dir=_get("LOCAL_INPUT_DIR", "./data/input"),
             local_output_dir=_get("LOCAL_OUTPUT_DIR", "./data/output"),
             abstract_sample_size=int(_get("ABSTRACT_SAMPLE_SIZE", "40")),

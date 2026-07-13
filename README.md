@@ -66,11 +66,26 @@ cited_refs, citing_patents`
 
 여러 값이 한 셀에 있는 경우(`;`, `|`, `,`, `//` 구분)도 분해해 집계합니다.
 
+### 매핑 확인 및 수동 지정
+업로드 시 위 정규 컬럼으로 **자동 매핑**되며, 화면의 *"미리보기 & 컬럼 매핑"* 에서
+결과를 표로 확인할 수 있습니다. **"수동으로 매핑 수정하기"** 를 켜면 각 정규 항목마다
+엑셀 원본 컬럼을 드롭다운으로 직접 지정할 수 있습니다(자동 인식 실패/오인식 보정).
+한 원본 컬럼을 여러 정규 항목에 중복 지정하면 경고가 표시됩니다.
+
 ---
 
 ## 4. Dataiku 배포 가이드
 
-1. **관리 폴더 2개 생성** (Flow → +Dataset/Folder): 입력용, 출력용. 각 폴더 ID를 확인.
+1. **관리 폴더 2개 생성** (Flow → +Dataset/Folder): 입력용/출력용.
+   기본 폴더명은 아래와 같으며(원하면 변경 가능), 폴더는 **이름 또는 ID** 로 지정할 수 있습니다.
+
+   | 용도 | 기본 폴더명 | 저장되는 파일명 |
+   |------|-------------|-----------------|
+   | 입력(업로드 엑셀) | `ip_insight_input` | `input_patents_<타임스탬프>.xlsx` |
+   | 출력(PPT 리포트) | `ip_insight_output` | `ip_insight_report_<타임스탬프>.pptx` |
+
+   폴더명을 바꾸려면 환경변수 `DKU_INPUT_FOLDER` / `DKU_OUTPUT_FOLDER`(이름) 또는
+   `DKU_INPUT_FOLDER_ID` / `DKU_OUTPUT_FOLDER_ID`(ID)를 지정하세요.
 2. **코드 환경**: `requirements.txt`의 패키지를 포함한 Python 코드 환경 생성
    (`dataiku`는 기본 제공되므로 별도 설치 불필요).
 3. **웹앱 생성**: *Code* → *Webapps* → **Streamlit** 선택.
@@ -95,8 +110,9 @@ cited_refs, citing_patents`
 | 환경변수 | 설명 | 예시 |
 |----------|------|------|
 | `DKU_LLM_ID` | 기본 LLM Mesh ID (허용 목록 중 하나) | `azureopenai:dw-aoai-chat-eastus2-cognitiv:gpt-5.4` |
-| `DKU_INPUT_FOLDER_ID` | 입력 관리 폴더 ID | `AbC12xYz` |
-| `DKU_OUTPUT_FOLDER_ID` | 출력 관리 폴더 ID | `Def34Uvw` |
+| `DKU_INPUT_FOLDER` | 입력 관리 폴더 **이름** (기본 `ip_insight_input`) | `ip_insight_input` |
+| `DKU_OUTPUT_FOLDER` | 출력 관리 폴더 **이름** (기본 `ip_insight_output`) | `ip_insight_output` |
+| `DKU_INPUT_FOLDER_ID` / `DKU_OUTPUT_FOLDER_ID` | (대안) 폴더를 ID로 지정 | `AbC12xYz` |
 | `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | (선택) 생성 파라미터 | `0.3` / `1800` |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | (선택) **로컬 개발 폴백 전용** | `sk-...` / `gpt-4o` |
 

@@ -35,15 +35,22 @@ def _local_dir(kind: str) -> str:
     return path
 
 
+def _folder_ref(kind: str) -> str:
+    return settings.input_folder_ref if kind == "input" else settings.output_folder_ref
+
+
 def _folder(kind: str):
-    """kind: 'input' | 'output' 에 해당하는 Dataiku Folder 핸들 반환."""
-    folder_id = settings.input_folder_id if kind == "input" else settings.output_folder_id
-    if not folder_id:
+    """kind: 'input' | 'output' 에 해당하는 Dataiku Folder 핸들 반환.
+
+    dataiku.Folder(ref) 는 폴더 '이름' 또는 'ID' 모두 허용한다.
+    """
+    ref = _folder_ref(kind)
+    if not ref:
         raise RuntimeError(
-            f"Dataiku {kind} 폴더 ID가 설정되지 않았습니다. "
-            f"환경변수 DKU_{kind.upper()}_FOLDER_ID 를 지정하세요."
+            f"Dataiku {kind} 폴더가 설정되지 않았습니다. "
+            f"환경변수 DKU_{kind.upper()}_FOLDER (이름) 또는 DKU_{kind.upper()}_FOLDER_ID 를 지정하세요."
         )
-    return dataiku.Folder(folder_id)  # type: ignore
+    return dataiku.Folder(ref)  # type: ignore
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +92,5 @@ def list_files(kind: str) -> List[str]:
 def location_hint(kind: str) -> str:
     """UI 표시에 쓰는, 파일이 저장되는 위치 설명."""
     if is_dataiku():
-        folder_id = settings.input_folder_id if kind == "input" else settings.output_folder_id
-        return f"Dataiku 관리 폴더 (ID: {folder_id or '미설정'})"
+        return f"Dataiku 관리 폴더 '{_folder_ref(kind)}'"
     return os.path.abspath(_local_dir(kind))

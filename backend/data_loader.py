@@ -44,6 +44,34 @@ CANONICAL_COLUMNS: Dict[str, List[str]] = {
 }
 
 
+# 정규 컬럼명 -> UI 표시용 한글 라벨
+CANONICAL_LABELS: Dict[str, str] = {
+    "publication_number": "공개/특허 번호",
+    "title": "발명의 명칭",
+    "abstract": "초록",
+    "dwpi_title": "DWPI 제목",
+    "dwpi_abstract": "DWPI 초록",
+    "assignee": "출원인",
+    "dwpi_assignee": "DWPI 표준 출원인",
+    "inventor": "발명자",
+    "priority_date": "우선일",
+    "application_date": "출원일",
+    "publication_date": "공개일",
+    "ipc": "IPC 분류",
+    "cpc": "CPC 분류",
+    "dwpi_class": "DWPI Class Code",
+    "dwpi_manual_code": "DWPI Manual Code",
+    "country": "국가/특허청",
+    "family_id": "패밀리 ID",
+    "cited_refs": "인용 참조(피인용 대상)",
+    "citing_patents": "인용한 특허(피인용)",
+}
+
+
+def label_for(canonical: str) -> str:
+    return CANONICAL_LABELS.get(canonical, canonical)
+
+
 def _norm(name: str) -> str:
     return "".join(ch for ch in str(name).lower() if ch.isalnum() or ch == " ").strip()
 
@@ -94,3 +122,24 @@ def normalize(df: pd.DataFrame, mapping: Optional[Dict[str, str]] = None) -> pd.
 def available_columns(df: pd.DataFrame) -> List[str]:
     """정규 컬럼 중 실제 존재하는 것."""
     return [c for c in CANONICAL_COLUMNS if c in df.columns]
+
+
+def invert_selection(selection: Dict[str, Optional[str]]) -> Dict[str, str]:
+    """UI용 {정규컬럼: 원본컬럼|None} 을 normalize용 {원본컬럼: 정규컬럼} 으로 변환.
+
+    원본 컬럼이 지정되지 않은(None/빈값) 항목은 제외한다.
+    """
+    mapping: Dict[str, str] = {}
+    for canonical, source in selection.items():
+        if source:
+            mapping[source] = canonical
+    return mapping
+
+
+def duplicate_sources(selection: Dict[str, Optional[str]]) -> List[str]:
+    """하나의 원본 컬럼이 둘 이상의 정규 컬럼에 매핑된 경우(충돌) 목록 반환."""
+    used: Dict[str, int] = {}
+    for source in selection.values():
+        if source:
+            used[source] = used.get(source, 0) + 1
+    return [src for src, cnt in used.items() if cnt > 1]

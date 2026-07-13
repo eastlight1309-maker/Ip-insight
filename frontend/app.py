@@ -80,6 +80,72 @@ def insight_picker() -> list:
     return selected
 
 
+NONE_LABEL = "— (사용 안 함) —"
+
+
+def mapping_editor(raw: pd.DataFrame) -> dict:
+    """자동 매핑을 기본값으로 채우고, 사용자가 확인·수정할 수 있는 매핑 편집기.
+
+    반환: normalize 용 {원본 컬럼: 정규 컬럼} 매핑.
+    """
+    auto = data_loader.detect_mapping(raw)  # {원본: 정규}
+    auto_inv = {canon: src for src, canon in auto.items()}  # {정규: 원본}
+    options = [NONE_LABEL] + list(map(str, raw.columns))
+
+    st.markdown("**컬럼 매핑 확인 / 수정**")
+    st.caption(
+        f"자동 인식 {len(auto)}개. 각 정규 항목에 대응하는 엑셀 원본 컬럼을 확인하고, "
+        "틀리거나 비어 있으면 직접 골라주세요."
+    )
+
+    # 자동/수동 여부 토글
+    manual = st.checkbox("수동으로 매핑 수정하기", value=False, key="manual_mapping")
+
+    if not manual:
+        # 자동 매핑만 표로 표시
+        if auto:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {"정규 컬럼": data_loader.label_for(c), "코드명": c, "원본 컬럼": s}
+                        for s, c in auto.items()
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.warning("표준 특허/DWPI 컬럼을 자동 인식하지 못했습니다. '수동으로 매핑 수정하기'를 켜세요.")
+        return auto
+
+    # 수동 편집: 정규 컬럼별 selectbox (3열 그리드)
+    selection: dict = {}
+    canonicals = list(data_loader.CANONICAL_COLUMNS.keys())
+    cols = st.columns(3)
+    for i, canonical in enumerate(canonicals):
+        default_src = auto_inv.get(canonical)
+        idx = options.index(default_src) if default_src in options else 0
+        with cols[i % 3]:
+            chosen = st.selectbox(
+                f"{data_loader.label_for(canonical)}  \n`{canonical}`",
+                options,
+                index=idx,
+                key=f"map_{canonical}",
+            )
+        selection[canonical] = None if chosen == NONE_LABEL else chosen
+
+    dups = data_loader.duplicate_sources(selection)
+    if dups:
+        st.error(
+            "같은 원본 컬럼이 여러 정규 항목에 중복 지정되었습니다: "
+            + ", ".join(dups)
+            + " — 하나만 남겨주세요."
+        )
+    mapping = data_loader.invert_selection(selection)
+    st.caption(f"현재 매핑된 항목 수: {len(mapping)}")
+    return mapping
+
+
 # ---------------------------------------------------------------------------
 # 결과 렌더링
 # ---------------------------------------------------------------------------
@@ -149,16 +215,11 @@ def main() -> None:
         st.error(f"엑셀을 읽지 못했습니다: {exc}")
         st.stop()
 
-    mapping = data_loader.detect_mapping(raw)
-    with st.expander(f"미리보기 & 컬럼 매핑 (총 {len(raw)}행, 인식 {len(mapping)}개 컬럼)", expanded=True):
+    auto = data_loader.detect_mapping(raw)
+    with st.expander(f"미리보기 & 컬럼 매핑 (총 {len(raw)}행, 자동 인식 {len(auto)}개 컬럼)", expanded=True):
         st.dataframe(raw.head(10), use_container_width=True)
-        if mapping:
-            st.markdown("**자동 인식된 컬럼 매핑** (원본 → 정규명)")
-            st.table(pd.DataFrame(
-                [{"원본 컬럼": k, "정규 컬럼": v} for k, v in mapping.items()]
-            ))
-        else:
-            st.warning("표준 특허/DWPI 컬럼을 자동 인식하지 못했습니다. 분석 품질이 낮을 수 있습니다.")
+        st.divider()
+        mapping = mapping_editor(raw)
 
     # 2) 인사이트 선택
     selected = insight_picker()
