@@ -11,8 +11,8 @@ import sys
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
-from backend import data_loader, service  # noqa: E402
-from backend.insights import all_insight_ids  # noqa: E402
+from ipinsight import data_loader, service  # noqa: E402
+from ipinsight.insights import all_insight_ids  # noqa: E402
 
 
 def _sample_bytes() -> bytes:

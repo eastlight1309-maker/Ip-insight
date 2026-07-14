@@ -1,10 +1,14 @@
 """IP Insight — Streamlit 프론트엔드.
 
 Dataiku 의 Streamlit 웹앱으로 배포하는 것을 전제로 한다.
-백엔드 로직은 `backend` 패키지에 분리되어 있고, 이 파일은 UI만 담당한다.
+백엔드 로직은 `ipinsight` 패키지에 분리되어 있고, 이 파일은 UI만 담당한다.
+
+패키지명 주의: Dataiku 웹앱은 코드가 실행 폴더 `backend/main.py` 에 배치되므로
+공용 패키지 이름을 `backend`로 두면 충돌한다. 그래서 `ipinsight` 로 명명했고,
+이 패키지는 Dataiku '프로젝트 라이브러리(python/ipinsight)' 에 두면 자동 임포트된다.
 
 실행(로컬):  streamlit run frontend/app.py
-Dataiku:     웹앱 코드로 본 파일 내용을 사용 (아래 sys.path 처리로 backend import).
+Dataiku:     본 파일 내용을 Streamlit 웹앱 코드로 사용.
 """
 
 from __future__ import annotations
@@ -13,7 +17,8 @@ import os
 import sys
 from datetime import datetime
 
-# 프로젝트 루트를 import 경로에 추가 (Dataiku 웹앱/로컬 모두 대응)
+# 로컬 실행 시 프로젝트 루트를 import 경로에 추가 (Dataiku에서는 프로젝트 라이브러리가
+# 자동으로 sys.path 에 포함되므로 아래 처리는 무해하게 무시된다).
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
@@ -21,9 +26,9 @@ if _ROOT not in sys.path:
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
-from backend import data_loader, dataiku_io, llm, service  # noqa: E402
-from backend.config import ALLOWED_LLM_CANDIDATES, settings  # noqa: E402
-from backend.insights import INSIGHTS, get_insight  # noqa: E402
+from ipinsight import data_loader, dataiku_io, llm, service  # noqa: E402
+from ipinsight.config import ALLOWED_LLM_CANDIDATES, settings  # noqa: E402
+from ipinsight.insights import INSIGHTS, get_insight  # noqa: E402
 
 st.set_page_config(page_title="IP Insight 분석기", page_icon="📊", layout="wide")
 

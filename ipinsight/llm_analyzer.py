@@ -3,7 +3,7 @@
 각 인사이트에 대해 (1) 정량 통계와 (2) 초록 샘플을 컨텍스트로 주고,
 insights.py 의 '추천 항목'을 채우도록 구조화된 JSON을 요청한다.
 
-호출은 backend.llm 의 클라이언트(Dataiku LLM Mesh 우선, OpenAI 폴백)를 사용한다.
+호출은 ipinsight.llm 의 클라이언트(Dataiku LLM Mesh 우선, OpenAI 폴백)를 사용한다.
 사용 가능한 클라이언트가 없으면 오프라인 데모용 mock 결과를 반환해
 UI/PPT 파이프라인을 API 없이도 검증할 수 있다.
 """
