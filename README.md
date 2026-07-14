@@ -12,8 +12,9 @@ Derwent **DWPI**를 포함한 특허 엑셀 파일을 업로드하면, **Dataiku
 ```
 Ip-insight/
 ├── frontend/
-│   └── app.py              # Streamlit UI (업로드·선택·결과·다운로드) — UI만 담당
-├── ipinsight/              # 순수 로직 패키지 (UI 의존성 없음)  ※ 이름 주의(아래)
+│   └── app.py              # 로컬 실행 진입점(얇은 래퍼) — ipinsight.webapp.main 호출
+├── ipinsight/              # 순수 로직 + UI 패키지 (Dataiku 프로젝트 라이브러리에 배치)
+│   ├── webapp.py           # Streamlit UI (업로드·매핑·선택·결과·다운로드)
 │   ├── insights.py         # 인사이트 카탈로그 + 추천 항목 정의  ★
 │   ├── config.py           # 환경변수/설정 (+ 허용 LLM 목록)
 │   ├── dataiku_io.py       # Dataiku 관리 폴더 I/O (+ 로컬 폴백)
@@ -22,7 +23,8 @@ Ip-insight/
 │   ├── llm.py              # LLM 호출 추상화 (Dataiku LLM Mesh → OpenAI 폴백 → 데모)
 │   ├── llm_analyzer.py     # 인사이트별 분석 생성
 │   ├── ppt_builder.py      # python-pptx 리포트 생성 (네이티브 차트)
-│   └── service.py          # 파이프라인 오케스트레이션 (프론트 진입점)
+│   └── service.py          # 파이프라인 오케스트레이션 (진입점)
+├── dataiku_webapp_code.py  # Dataiku 웹앱 편집기에 붙여넣을 2줄 코드
 ├── scripts/make_sample.py  # 데모용 가상 DWPI 엑셀 생성
 ├── tests/test_pipeline.py  # 엔드투엔드 스모크 테스트
 ├── sample/                 # 샘플 엑셀
@@ -102,10 +104,16 @@ cited_refs, citing_patents`
    - 프로젝트 라이브러리의 `python/` 는 웹앱 백엔드의 `sys.path` 에 자동 포함되어
      `from ipinsight import ...` 가 동작합니다. (Git 연동 프로젝트라면 커밋만으로 반영)
 4. **웹앱 생성**: *Code* → *Webapps* → **Code webapp** → **Streamlit** 선택.
-   - `frontend/app.py` 내용을 그대로 웹앱 Python 코드로 붙여넣습니다.
-     (Dataiku가 이 코드를 실행 폴더 `backend/main.py` 로 배치 → 그래서 공용 패키지명은
-     `backend`가 아니라 `ipinsight` 여야 합니다.)
-   - 웹앱 설정에서 위 코드 환경을 지정.
+   - 웹앱 Python 코드에는 **아래 2줄만** 넣습니다(= `dataiku_webapp_code.py` 내용):
+     ```python
+     from ipinsight.webapp import main
+     main()
+     ```
+   - 실제 UI 는 `ipinsight/webapp.py`(라이브러리)에 있으므로, 이후 UI를 수정해도
+     웹앱 편집기 코드는 그대로 두면 됩니다. 라이브러리만 갱신하면 반영됩니다.
+   - 웹앱 설정에서 3단계의 코드 환경을 지정.
+   - ⚠️ **이전에 `from backend import ...` 코드를 붙여넣었다면 반드시 위 2줄로 교체**하세요.
+     Git push는 DSS 웹앱 편집기 코드를 자동으로 바꾸지 않습니다.
 5. **LLM 연결(LLM Mesh)**: DSS 관리자가 아래 허용된 LLM 연결을 활성화해야 합니다.
    앱은 `project.get_llm(<LLM_ID>)` 로 호출하며, 별도 API 키를 코드에 넣지 않습니다.
 
