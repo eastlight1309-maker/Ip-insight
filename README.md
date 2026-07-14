@@ -173,3 +173,97 @@ python tests/test_pipeline.py            # API 키 없이 데모 모드 스모�
    채운 구조화(JSON) 분석을 생성.
 2. **OpenAI 폴백** (로컬 개발): Dataiku가 없고 `OPENAI_API_KEY`가 있을 때만.
 3. **데모(mock)**: 위 둘 다 불가할 때 자리표시자 결과로 파이프라인/PPT 검증.
+
+---
+
+# 🌐 엑셀 번역기 (별도 앱)
+
+같은 저장소에 **엑셀 컬럼 번역기** 웹앱을 함께 담았습니다. 엑셀을 업로드하고
+번역할 컬럼을 고르면, **한국어·중국어·일본어·영어** 사이에서 **출발/도착 언어**를
+선택해 번역한 뒤 **결과를 원본 표의 맨 뒤 컬럼으로 추가**해 돌려줍니다. LLM 은
+IP Insight 와 **동일한 Dataiku LLM Mesh 허용 목록**을 사용합니다.
+
+## T1. 구조 (백엔드 / 프론트엔드 분리)
+
+```
+Ip-insight/
+├── frontend/
+│   └── translator_app.py             # 로컬 실행 진입점(얇은 래퍼)
+├── exceltranslator/                  # 순수 로직 + UI 패키지 (프로젝트 라이브러리에 배치)
+│   ├── webapp.py                     # Streamlit UI (탭: 새 번역 / 이전 결과)
+│   ├── config.py                     # 설정 (+ 허용 LLM 목록, 지원 언어)
+│   ├── llm.py                        # LLM 호출 추상화 (IP Insight 와 동일 방식)
+│   ├── dataiku_io.py                 # 관리 폴더 I/O (프로젝트별 하위 폴더)
+│   ├── excel_io.py                   # 엑셀 읽기/쓰기
+│   ├── translator.py                 # LLM 배치 번역 엔진
+│   └── service.py                    # 파이프라인 오케스트레이션 (진입점)
+├── dataiku_translator_webapp_code.py # Dataiku 웹앱 편집기에 붙여넣을 2줄 코드
+└── tests/test_translator.py          # 엔드투엔드 스모크 테스트
+```
+
+> **⚠️ 패키지명을 `backend` 로 쓰지 않는 이유**는 IP Insight 와 동일합니다
+> (Dataiku 웹앱 실행 폴더 `backend/main.py` 와 충돌). 그래서 **`exceltranslator`** 로 둡니다.
+
+**데이터 흐름:** 엑셀 업로드 → (프로젝트별 입력 폴더 저장) → 컬럼 선택 →
+출발/도착 언어 선택 → LLM 번역 → **결과 컬럼을 맨 뒤에 추가** →
+(프로젝트별 출력 폴더 저장) → 화면/폴더에서 다운로드.
+
+## T2. 주요 기능 (요청 사항 매핑)
+
+| 요청 | 구현 |
+|------|------|
+| 새 프로젝트로 엑셀 업로드 | '새 번역' 탭에서 **프로젝트 이름** 입력 후 업로드 |
+| 필요한 열 번역 → 마지막 열에 결과 | 번역할 컬럼을 다중 선택 → `원본 [도착언어]` 컬럼을 **맨 뒤에 추가** |
+| 한/중/일/영 출발·도착 언어 선택 | 출발 언어(+자동감지) / 도착 언어 드롭다운 |
+| 프로젝트별 입력·출력 폴더 저장 | 관리 폴더 `excel_translator_input` / `excel_translator_output` 의 `<프로젝트명>/` 하위에 저장 |
+| 백엔드/프론트엔드 분리 | 로직 = `exceltranslator/` 패키지, UI 진입 = 2줄 웹앱 코드 |
+| 화면·폴더 양쪽 다운로드 | '새 번역' 탭에서 화면 다운로드, '이전 결과' 탭에서 폴더 다운로드 |
+| 탭 분리로 이전 결과 조회 | **🆕 새 번역** / **📚 이전 결과** 두 탭 |
+| IP Insight 와 동일한 LLM API | `exceltranslator/llm.py` 가 동일한 `project.get_llm(<허용 ID>)` 사용 |
+
+## T3. Dataiku 배포 가이드
+
+1. **관리 폴더 2개 생성**: 입력용 `excel_translator_input`, 출력용 `excel_translator_output`.
+   폴더명은 아래 환경변수로 변경 가능하며 **이름 또는 ID** 로 지정할 수 있습니다.
+
+   | 용도 | 기본 폴더명 | 저장 경로 |
+   |------|-------------|-----------|
+   | 입력(업로드 엑셀) | `excel_translator_input` | `<프로젝트명>/input_<타임스탬프>.xlsx` |
+   | 출력(번역 엑셀) | `excel_translator_output` | `<프로젝트명>/translated_<타임스탬프>.xlsx` |
+
+2. **공용 로직을 프로젝트 라이브러리에 등록**: 프로젝트 `</> (Code)` → **Libraries** →
+   `python/` 아래에 **`exceltranslator/` 폴더 전체**를 복사 (경로: `python/exceltranslator/...`).
+3. **웹앱 생성**: *Code* → *Webapps* → **Code webapp** → **Streamlit**. 웹앱 코드에는
+   **아래 2줄만** 넣습니다(= `dataiku_translator_webapp_code.py` 내용):
+   ```python
+   from exceltranslator.webapp import main
+   main()
+   ```
+4. **LLM 연결(LLM Mesh)**: IP Insight 와 동일한 허용 LLM(§4의 표)을 사용합니다.
+   목록은 `exceltranslator/config.py` 의 `ALLOWED_LLM_CANDIDATES` 에서 관리합니다.
+
+   | 환경변수 | 설명 | 기본값 |
+   |----------|------|--------|
+   | `DKU_LLM_ID` | 기본 LLM Mesh ID | 허용 목록 첫 항목 |
+   | `DKU_TRANSLATOR_INPUT_FOLDER` / `..._ID` | 입력 관리 폴더(이름/ID) | `excel_translator_input` |
+   | `DKU_TRANSLATOR_OUTPUT_FOLDER` / `..._ID` | 출력 관리 폴더(이름/ID) | `excel_translator_output` |
+   | `TRANSLATOR_BATCH_SIZE` | LLM 1회 호출당 셀 수 | `20` |
+   | `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | (선택) 생성 파라미터 | `0.0` / `2000` |
+   | `OPENAI_API_KEY` / `OPENAI_MODEL` | (선택) 로컬 개발 폴백 전용 | — |
+
+## T4. 로컬 실행 / 테스트
+
+Dataiku 밖에서는 관리 폴더 대신 `data/translator_input`, `data/translator_output` 로 폴백합니다.
+
+```bash
+pip install -r requirements.txt
+export OPENAI_API_KEY=sk-...              # (선택) 없으면 데모 모드
+streamlit run frontend/translator_app.py
+
+python tests/test_translator.py           # API 키 없이 데모 모드 스모크 테스트
+```
+
+## T5. 번역 동작 모드 (우선순위)
+
+IP Insight 와 동일합니다: **Dataiku LLM Mesh → OpenAI 폴백 → 데모(mock)**.
+데모 모드에서는 원문 앞에 `[EN]`, `[JA]` 등 도착 언어 표식을 붙여 파이프라인을 검증합니다.
