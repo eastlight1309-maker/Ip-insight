@@ -1,0 +1,6 @@
+# IP_Landscape chart 웹앱 의존성
+# 주의: Dataiku DSS 환경에서는 `dataiku` 패키지가 기본 제공되므로 여기 포함하지 않는다.
+streamlit>=1.30
+pandas>=1.5
+openpyxl>=3.1
+plotly>=5.18
