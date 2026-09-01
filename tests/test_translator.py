@@ -96,8 +96,53 @@ def test_history_listing():
     assert len(df) == 3
 
 
+def test_standard_webapp_backend():
+    """Standard(코드) 웹앱 Flask 백엔드 라우트 스모크 테스트. flask 없으면 건너뜀."""
+    try:
+        from flask import Flask
+    except Exception:
+        print("  (flask 미설치 → 백엔드 테스트 건너뜀)")
+        return
+    from exceltranslator import webbackend
+
+    app = Flask(__name__)
+    webbackend.register_routes(app)
+    c = app.test_client()
+
+    # bootstrap: 드롭다운 채우는 데이터
+    b = c.get("/api/bootstrap").get_json()
+    assert len(b["llms"]) == 4
+    assert len(b["languages"]["source"]) == 5  # auto + 4
+    assert len(b["languages"]["target"]) == 4
+
+    # inspect -> translate -> download 왕복
+    r = c.post(
+        "/api/inspect",
+        data={"file": (io.BytesIO(_sample_bytes()), "s.xlsx")},
+        content_type="multipart/form-data",
+    )
+    ins = r.get_json()
+    assert ins["columns"] == ["id", "product", "desc"]
+    t = c.post(
+        "/api/translate",
+        json={
+            "token": ins["token"],
+            "project": "백엔드테스트",
+            "columns": ["product"],
+            "src": "ko",
+            "tgt": "en",
+            "llm_id": b["llms"][0]["id"],
+            "filename": "s.xlsx",
+        },
+    ).get_json()
+    assert "product [영어]" in t["new_columns"]
+    dl = c.get(f"/api/download?kind=output&project=백엔드테스트&file={t['output_filename']}")
+    assert dl.status_code == 200 and dl.data[:2] == b"PK"
+
+
 if __name__ == "__main__":
     test_translate_texts_demo_mode()
     test_full_pipeline_demo_mode()
     test_history_listing()
+    test_standard_webapp_backend()
     print("모든 번역기 스모크 테스트 통과 ✅")

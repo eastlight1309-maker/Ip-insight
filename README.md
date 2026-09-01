@@ -189,17 +189,26 @@ IP Insight 와 **동일한 Dataiku LLM Mesh 허용 목록**을 사용합니다.
 Ip-insight/
 ├── frontend/
 │   └── translator_app.py             # 로컬 실행 진입점(얇은 래퍼)
-├── exceltranslator/                  # 순수 로직 + UI 패키지 (프로젝트 라이브러리에 배치)
-│   ├── webapp.py                     # Streamlit UI (탭: 새 번역 / 이전 결과)
+├── exceltranslator/                  # 순수 로직 패키지 (프로젝트 라이브러리에 배치)
+│   ├── webapp.py                     # (A) Streamlit UI (탭: 새 번역 / 이전 결과)
+│   ├── webbackend.py                 # (B) Standard 웹앱용 Flask 백엔드(/api/*)
 │   ├── config.py                     # 설정 (+ 허용 LLM 목록, 지원 언어)
 │   ├── llm.py                        # LLM 호출 추상화 (IP Insight 와 동일 방식)
 │   ├── dataiku_io.py                 # 관리 폴더 I/O (프로젝트별 하위 폴더)
 │   ├── excel_io.py                   # 엑셀 읽기/쓰기
 │   ├── translator.py                 # LLM 배치 번역 엔진
 │   └── service.py                    # 파이프라인 오케스트레이션 (진입점)
-├── dataiku_translator_webapp_code.py # Dataiku 웹앱 편집기에 붙여넣을 2줄 코드
+├── dataiku_standard_webapp/          # (B) Standard 웹앱 프론트 붙여넣기 파일
+│   ├── webapp.html / webapp.css / webapp.js
+│   └── backend_py.py                 #     Python 백엔드 탭용 2줄 코드
+├── dataiku_translator_webapp_code.py # (A) Streamlit 웹앱 편집기용 2줄 코드
+├── frontend/translator_app.py        # 로컬 실행 진입점(얇은 래퍼)
 └── tests/test_translator.py          # 엔드투엔드 스모크 테스트
 ```
+
+> 두 웹앱 방식(A: Streamlit / B: Standard)은 **같은 `exceltranslator/` 로직**을 공유합니다.
+> Standard 방식은 `<select>` 옵션을 프론트(JS)가 `/api/bootstrap` 으로 받아 채우므로,
+> **Python 백엔드가 켜져 있어야** 모델·언어 드롭다운이 채워집니다.
 
 > **⚠️ 패키지명을 `backend` 로 쓰지 않는 이유**는 IP Insight 와 동일합니다
 > (Dataiku 웹앱 실행 폴더 `backend/main.py` 와 충돌). 그래서 **`exceltranslator`** 로 둡니다.
@@ -233,12 +242,34 @@ Ip-insight/
 
 2. **공용 로직을 프로젝트 라이브러리에 등록**: 프로젝트 `</> (Code)` → **Libraries** →
    `python/` 아래에 **`exceltranslator/` 폴더 전체**를 복사 (경로: `python/exceltranslator/...`).
-3. **웹앱 생성**: *Code* → *Webapps* → **Code webapp** → **Streamlit**. 웹앱 코드에는
-   **아래 2줄만** 넣습니다(= `dataiku_translator_webapp_code.py` 내용):
+3. **웹앱 생성** — 아래 **두 방식 중 하나**를 선택합니다. 어느 쪽이든 로직(`exceltranslator/`)은 공유합니다.
+
+   **(A) Streamlit 웹앱** — *Code* → *Webapps* → **Code webapp** → **Streamlit**.
+   웹앱 코드에 **아래 2줄만** 넣습니다(= `dataiku_translator_webapp_code.py`):
    ```python
    from exceltranslator.webapp import main
    main()
    ```
+
+   **(B) Standard(코드) 웹앱** — *Code* → *Webapps* → **Code webapp** → **Standard**.
+   HTML/CSS/JS 프론트 + Python(Flask) 백엔드 구조이며, `dataiku_standard_webapp/` 폴더의
+   파일을 각 탭에 붙여넣습니다:
+
+   | Standard 웹앱 탭 | 붙여넣을 파일 |
+   |------------------|---------------|
+   | **HTML** | `dataiku_standard_webapp/webapp.html` |
+   | **CSS** | `dataiku_standard_webapp/webapp.css` |
+   | **JavaScript** | `dataiku_standard_webapp/webapp.js` |
+   | **Python (백엔드)** | `dataiku_standard_webapp/backend_py.py` (2줄) |
+
+   - Python 백엔드는 반드시 **활성화(Enable backend)** 해야 합니다. 백엔드가 꺼져 있으면
+     프론트의 `/api/*` 호출이 실패해 **드롭다운(모델·언어)이 비어 보입니다.** ← 흔한 원인.
+     화면 상단에 "백엔드 연결 실패…" 문구가 뜨면 백엔드 활성화/재시작을 확인하세요.
+   - 프론트는 `getWebAppBackendUrl('/api/...')` 로 백엔드를 호출합니다. 제공 엔드포인트:
+     `/api/bootstrap`(드롭다운 채우기), `/api/inspect`, `/api/columns`, `/api/translate`,
+     `/api/history`, `/api/preview`, `/api/download`.
+   - 웹앱 **Settings** 에서 관리 폴더 읽기/쓰기 및 LLM 사용 권한을 허용하세요.
+
 4. **LLM 연결(LLM Mesh)**: IP Insight 와 동일한 허용 LLM(§4의 표)을 사용합니다.
    목록은 `exceltranslator/config.py` 의 `ALLOWED_LLM_CANDIDATES` 에서 관리합니다.
 

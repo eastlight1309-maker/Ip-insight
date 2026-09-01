@@ -1,7 +1,9 @@
-# IP Insight 웹앱 의존성
-# 주의: Dataiku DSS 환경에서는 `dataiku` 패키지가 기본 제공되므로 여기 포함하지 않는다.
+# IP Insight / 엑셀 번역기 웹앱 의존성
+# 주의: Dataiku DSS 환경에서는 `dataiku` 와 `flask`(표준 웹앱 백엔드)가 기본 제공되므로
+#       여기 포함하지 않는다.
 streamlit>=1.30
 pandas>=1.5
 openpyxl>=3.1
 python-pptx>=0.6.21
 openai>=1.0.0
+# 로컬에서 Standard 웹앱 백엔드를 테스트하려면(선택): flask>=2.0

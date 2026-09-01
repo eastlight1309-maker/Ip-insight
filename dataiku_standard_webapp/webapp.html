@@ -1,0 +1,111 @@
+<!-- ==========================================================================
+  Dataiku "Standard(코드) 웹앱"의 [HTML] 탭에 붙여넣을 코드.
+  프론트엔드는 백엔드(webbackend.py)의 /api/* JSON 엔드포인트만 호출합니다.
+=========================================================================== -->
+<div id="translator-app">
+  <header class="app-header">
+    <h1>🌐 엑셀 번역기</h1>
+    <p class="subtitle">엑셀 업로드 → 컬럼 선택 → 한/중/일/영 번역 → 결과를 맨 뒤 컬럼에 추가 · Dataiku LLM Mesh 사용</p>
+    <p id="env-line" class="env-line"></p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-new">🆕 새 번역</button>
+    <button class="tab-btn" data-tab="tab-history">📚 이전 결과</button>
+  </div>
+
+  <!-- ================= 탭 1: 새 번역 ================= -->
+  <section id="tab-new" class="tab-panel active">
+    <div class="card">
+      <h2>1️⃣ 프로젝트 &amp; 엑셀 업로드</h2>
+      <label>프로젝트 이름
+        <input type="text" id="project" placeholder="예: 2026_마케팅_카탈로그" />
+      </label>
+      <label>번역할 엑셀 (.xlsx / .xls)
+        <input type="file" id="file" accept=".xlsx,.xls" />
+      </label>
+      <div id="inspect-status" class="status"></div>
+    </div>
+
+    <div class="card" id="settings-card" style="display:none;">
+      <h2>2️⃣ 번역 설정</h2>
+
+      <div id="sheet-row" class="row" style="display:none;">
+        <label>시트 선택
+          <select id="sheet"></select>
+        </label>
+      </div>
+
+      <label>🤖 LLM 모델 (Dataiku 허용 목록)
+        <select id="llm"></select>
+      </label>
+
+      <div class="row">
+        <label>출발 언어
+          <select id="src"></select>
+        </label>
+        <label>도착 언어
+          <select id="tgt"></select>
+        </label>
+      </div>
+
+      <div>
+        <div class="field-label">번역할 컬럼 선택 (여러 개 선택 가능 · 결과는 맨 뒤 컬럼으로 추가됨)</div>
+        <div id="columns" class="columns-box"></div>
+      </div>
+
+      <div class="run-row">
+        <button id="run-btn" class="primary" disabled>🚀 번역 실행</button>
+        <span id="llm-note" class="note"></span>
+      </div>
+      <div id="progress" class="status"></div>
+    </div>
+
+    <div class="card" id="result-card" style="display:none;">
+      <h2>결과</h2>
+      <div id="result-meta" class="status"></div>
+      <div class="run-row">
+        <button id="download-screen" class="primary">⬇️ 번역 결과 엑셀 다운로드 (화면에서 저장)</button>
+      </div>
+      <div class="table-wrap"><table id="result-table"></table></div>
+    </div>
+  </section>
+
+  <!-- ================= 탭 2: 이전 결과 ================= -->
+  <section id="tab-history" class="tab-panel">
+    <div class="card">
+      <h2>📚 이전 번역 결과 찾기</h2>
+      <p class="subtitle">출력 폴더에 저장된 프로젝트별 번역 결과를 조회하고 다운로드합니다.</p>
+      <div class="row">
+        <label>프로젝트 선택
+          <select id="hist-project"></select>
+        </label>
+        <button id="hist-refresh">🔄 새로고침</button>
+      </div>
+      <div id="hist-location" class="note"></div>
+
+      <div class="row">
+        <label>결과 파일 (최신순)
+          <select id="hist-file"></select>
+        </label>
+      </div>
+      <div class="run-row">
+        <button id="hist-preview">👁️ 미리보기</button>
+        <button id="hist-download" class="primary">⬇️ 폴더에서 다운로드</button>
+      </div>
+
+      <details id="hist-input-details" style="margin-top:10px;">
+        <summary>입력(원본) 파일 목록 보기</summary>
+        <div class="row" style="margin-top:8px;">
+          <label>원본 파일
+            <select id="hist-input-file"></select>
+          </label>
+          <button id="hist-input-download">⬇️ 원본 다운로드</button>
+        </div>
+      </details>
+
+      <div id="hist-status" class="status"></div>
+      <div class="table-wrap"><table id="hist-table"></table></div>
+    </div>
+  </section>
+</div>
