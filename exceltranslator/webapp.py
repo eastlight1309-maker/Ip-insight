@@ -11,10 +11,8 @@ UI 코드를 패키지 안에 두어, Dataiku 웹앱 편집기에는 아래 2줄
 
 from __future__ import annotations
 
-import os
 from datetime import datetime
 
-import pandas as pd
 import streamlit as st
 
 from . import dataiku_io, excel_io, llm, service
@@ -30,22 +28,74 @@ _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 # ---------------------------------------------------------------------------
+# Streamlit 버전 호환 헬퍼
+#   신/구 Streamlit 모두에서 안전하게 표를 그린다. (use_container_width 는
+#   2025-12-31 이후 제거 예정이라 최신 버전에서 예외가 날 수 있음)
+# ---------------------------------------------------------------------------
+def _show_df(df) -> None:
+    try:
+        st.dataframe(df, width="stretch")          # 최신 Streamlit
+    except TypeError:
+        try:
+            st.dataframe(df, use_container_width=True)  # 구 Streamlit
+        except TypeError:
+            st.dataframe(df)                        # 최소 폴백
+
+
+def _divider() -> None:
+    """st.divider() 는 Streamlit 1.23+ 에서만 존재 → 구버전은 markdown 폴백."""
+    fn = getattr(st, "divider", None)
+    if callable(fn):
+        fn()
+    else:
+        st.markdown("---")
+
+
+class _Progress:
+    """text 인자 유무와 관계없이 안전하게 동작하는 진행바 래퍼."""
+
+    def __init__(self, text: str = ""):
+        try:
+            self._bar = st.progress(0.0, text=text)
+        except TypeError:
+            self._bar = st.progress(0.0)
+
+    def update(self, frac: float, text: str = "") -> None:
+        frac = max(0.0, min(1.0, frac))
+        try:
+            self._bar.progress(frac, text=text)
+        except TypeError:
+            self._bar.progress(frac)
+
+
+# ---------------------------------------------------------------------------
 # 사이드바 — 설정
 # ---------------------------------------------------------------------------
-def sidebar() -> None:
-    st.sidebar.title("⚙️ 설정")
+def model_picker(container=None) -> str:
+    """LLM 모델 선택기. 본문/사이드바 어디서든 재사용 가능.
 
-    st.sidebar.subheader("🤖 LLM (Dataiku 허용 목록)")
+    container 를 주면 그 컨테이너(예: st.sidebar) 에, 없으면 현재 위치(본문)에 렌더링.
+    선택 결과를 settings 에 반영하고 선택된 LLM ID 를 반환한다.
+    """
+    ui = container if container is not None else st
     labels = [label for label, _ in ALLOWED_LLM_CANDIDATES]
     ids = [llm_id for _, llm_id in ALLOWED_LLM_CANDIDATES]
     default_idx = ids.index(settings.llm_id) if settings.llm_id in ids else 0
-    choice = st.sidebar.selectbox("모델 선택", labels, index=default_idx)
+    choice = ui.selectbox("🤖 LLM 모델 (Dataiku 허용 목록)", labels, index=default_idx, key="llm_model")
     settings.set_llm_id(ids[labels.index(choice)])
-    st.sidebar.caption(f"LLM ID: `{settings.llm_id}`")
+    ui.caption(f"LLM ID: `{settings.llm_id}`")
+    return settings.llm_id
+
+
+def sidebar() -> None:
+    st.sidebar.title("⚙️ 설정")
+
     st.sidebar.caption(
         "실행 환경: "
         + ("Dataiku LLM Mesh ✅" if llm.is_dataiku() else "로컬(OpenAI 폴백/데모)")
     )
+    st.sidebar.caption(f"현재 LLM: `{settings.llm_id}`")
+    st.sidebar.caption("모델 선택은 '🆕 새 번역' 탭의 **번역 설정**에서 합니다.")
 
     if not llm.is_dataiku():
         with st.sidebar.expander("로컬 개발용 OpenAI 폴백(선택)"):
@@ -55,41 +105,41 @@ def sidebar() -> None:
                 settings.openai_api_key = key
             settings.openai_model = model or settings.openai_model
 
-    st.sidebar.divider()
+    st.sidebar.markdown("---")
     st.sidebar.subheader("📁 저장 위치 (Dataiku)")
     st.sidebar.caption(f"환경: {'Dataiku' if dataiku_io.is_dataiku() else '로컬(폴백)'}")
     st.sidebar.caption(f"입력 폴더: {dataiku_io.location_hint('input')}")
     st.sidebar.caption(f"출력 폴더: {dataiku_io.location_hint('output')}")
     st.sidebar.caption("파일은 `<프로젝트명>/` 하위에 저장됩니다.")
 
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f"Streamlit {getattr(st, '__version__', '?')}")
+
 
 # ---------------------------------------------------------------------------
 # 언어 선택 위젯
 # ---------------------------------------------------------------------------
 def _language_pickers() -> tuple:
+    # format_func 대신, 표시 라벨을 직접 옵션으로 넘겨 버전 호환성을 높인다.
     lang_codes = list(LANGUAGES.keys())
+
+    # 출발 언어: 자동 감지 + 4개 언어
+    src_codes = [AUTO_DETECT] + lang_codes
+    src_labels = [language_label(c) for c in src_codes]  # ["자동 감지","한국어",...]
+    # 도착 언어: 4개 언어
+    tgt_codes = list(lang_codes)
+    tgt_labels = [language_label(c) for c in tgt_codes]
+
     c1, c2 = st.columns(2)
     with c1:
-        src_options = [AUTO_DETECT] + lang_codes
-        src = st.selectbox(
-            "출발 언어",
-            src_options,
-            index=0,
-            format_func=language_label,
-            key="src_lang",
-        )
+        src_label = st.selectbox("출발 언어", src_labels, index=0, key="src_lang")
+        src = src_codes[src_labels.index(src_label)]
     with c2:
-        # 기본 도착언어는 출발언어와 다르게
-        default_tgt = 0
-        if src == "ko":
-            default_tgt = lang_codes.index("en")
-        tgt = st.selectbox(
-            "도착 언어",
-            lang_codes,
-            index=default_tgt,
-            format_func=language_label,
-            key="tgt_lang",
-        )
+        # 기본 도착언어는 출발언어와 다르게(한국어→영어)
+        default_tgt = tgt_codes.index("en") if src == "ko" else 0
+        tgt_label = st.selectbox("도착 언어", tgt_labels, index=default_tgt, key="tgt_lang")
+        tgt = tgt_codes[tgt_labels.index(tgt_label)]
+
     if src != AUTO_DETECT and src == tgt:
         st.warning("출발 언어와 도착 언어가 같습니다. 도착 언어를 다르게 선택하세요.")
     return src, tgt
@@ -112,7 +162,7 @@ def _render_result(out: service.RunOutput) -> None:
         f"번역 컬럼: {', '.join(out.translated_columns) or '없음'} → "
         f"추가된 결과 컬럼: {', '.join(out.new_columns) or '없음'}"
     )
-    st.dataframe(out.df.head(30), use_container_width=True)
+    _show_df(out.df.head(30))
 
     st.download_button(
         "⬇️ 번역 결과 엑셀 다운로드 (화면에서 저장)",
@@ -165,9 +215,10 @@ def tab_new() -> None:
         return
 
     with st.expander(f"미리보기 (총 {len(df)}행 · {len(df.columns)}컬럼)", expanded=True):
-        st.dataframe(df.head(10), use_container_width=True)
+        _show_df(df.head(10))
 
     st.subheader("2️⃣ 번역 설정")
+    model_picker()          # LLM 모델 선택 (본문)
     src, tgt = _language_pickers()
 
     columns = st.multiselect(
@@ -189,11 +240,11 @@ def tab_new() -> None:
     disabled = not columns or (src != AUTO_DETECT and src == tgt)
     if st.button("🚀 번역 실행", type="primary", disabled=disabled):
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        prog = st.progress(0.0, text="번역 준비 중…")
+        prog = _Progress("번역 준비 중…")
 
         def _on_progress(done: int, total: int) -> None:
             frac = (done / total) if total else 1.0
-            prog.progress(min(frac, 1.0), text=f"번역 중… {done}/{total} 셀")
+            prog.update(frac, f"번역 중… {done}/{total} 셀")
 
         with st.spinner("번역 중… (행/컬럼 수에 따라 시간이 걸립니다)"):
             out = service.run_translation(
@@ -207,12 +258,12 @@ def tab_new() -> None:
                 sheet_name=sheet,
                 progress=_on_progress,
             )
-        prog.progress(1.0, text="완료")
+        prog.update(1.0, "완료")
         st.session_state["last_out"] = out
 
     out = st.session_state.get("last_out")
     if out is not None:
-        st.divider()
+        _divider()
         _render_result(out)
 
 
@@ -265,7 +316,7 @@ def tab_history() -> None:
     if preview and data is not None:
         try:
             df = excel_io.read_excel(data)
-            st.dataframe(df.head(30), use_container_width=True)
+            _show_df(df.head(30))
         except Exception as exc:
             st.error(f"미리보기 실패: {exc}")
 
@@ -292,7 +343,16 @@ def tab_history() -> None:
 # 메인 진입점
 # ---------------------------------------------------------------------------
 def main() -> None:
-    st.set_page_config(page_title="엑셀 번역기", page_icon="🌐", layout="wide")
+    try:
+        st.set_page_config(
+            page_title="엑셀 번역기",
+            page_icon="🌐",
+            layout="wide",
+            initial_sidebar_state="expanded",
+        )
+    except Exception:
+        # Dataiku 등 일부 환경에서 set_page_config 가 이미 호출됐거나 제한될 수 있음
+        pass
     sidebar()
     st.title("🌐 엑셀 번역기")
     st.caption(
